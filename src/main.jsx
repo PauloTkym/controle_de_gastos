@@ -146,6 +146,22 @@ function formatarMes(mesISO) {
   });
 }
 
+function tipoDaTransacao(item) {
+  return item.tipo || (item.valor >= 0 ? 'Entrada' : 'Saida');
+}
+
+function opcoesFiltroPorTipo(tipoFiltro, opcoes, transacoes, campo) {
+  const opcoesCadastradas =
+    tipoFiltro === 'todos' ? Object.values(opcoes).flat() : opcoes[tipoFiltro] || [];
+  const opcoesUsadas = transacoes
+    .filter((item) => tipoFiltro === 'todos' || tipoDaTransacao(item) === tipoFiltro)
+    .map((item) => item[campo]);
+
+  return [...new Set([...opcoesCadastradas, ...opcoesUsadas].filter(Boolean))].sort((a, b) =>
+    a.localeCompare(b, 'pt-BR'),
+  );
+}
+
 function normalizarValor(valorTexto) {
   const texto = String(valorTexto).trim().replace(/\s/g, '').replace(',', '.');
   const numero = Number.parseFloat(texto);
@@ -219,6 +235,7 @@ function App() {
   const [pagamentos, setPagamentos] = useState(() => carregarOpcoes(PAGAMENTOS_STORAGE_KEY, pagamentosPadrao));
   const [mesFiltro, setMesFiltro] = useState(mesAtual());
   const [pessoaFiltro, setPessoaFiltro] = useState('todos');
+  const [tipoFiltro, setTipoFiltro] = useState('todos');
   const [categoriaFiltro, setCategoriaFiltro] = useState('todos');
   const [pagamentoFiltro, setPagamentoFiltro] = useState('todos');
 
@@ -237,30 +254,23 @@ function App() {
   }, [transacoes]);
 
   const categoriasFiltro = useMemo(() => {
-    const opcoes = new Set([
-      ...Object.values(categorias).flat(),
-      ...transacoes.map((item) => item.categoria),
-    ].filter(Boolean));
-    return [...opcoes].sort((a, b) => a.localeCompare(b, 'pt-BR'));
-  }, [categorias, transacoes]);
+    return opcoesFiltroPorTipo(tipoFiltro, categorias, transacoes, 'categoria');
+  }, [categorias, transacoes, tipoFiltro]);
 
   const pagamentosFiltro = useMemo(() => {
-    const opcoes = new Set([
-      ...Object.values(pagamentos).flat(),
-      ...transacoes.map((item) => item.formaPagamento),
-    ].filter(Boolean));
-    return [...opcoes].sort((a, b) => a.localeCompare(b, 'pt-BR'));
-  }, [pagamentos, transacoes]);
+    return opcoesFiltroPorTipo(tipoFiltro, pagamentos, transacoes, 'formaPagamento');
+  }, [pagamentos, transacoes, tipoFiltro]);
 
   const lancamentosFiltrados = useMemo(() => {
     return transacoes.filter((item) => {
       const passaMes = mesFiltro === 'todos' || item.data?.startsWith(mesFiltro);
       const passaPessoa = pessoaFiltro === 'todos' || item.pessoa === pessoaFiltro;
+      const passaTipo = tipoFiltro === 'todos' || tipoDaTransacao(item) === tipoFiltro;
       const passaCategoria = categoriaFiltro === 'todos' || item.categoria === categoriaFiltro;
       const passaPagamento = pagamentoFiltro === 'todos' || item.formaPagamento === pagamentoFiltro;
-      return passaMes && passaPessoa && passaCategoria && passaPagamento;
+      return passaMes && passaPessoa && passaTipo && passaCategoria && passaPagamento;
     });
-  }, [transacoes, mesFiltro, pessoaFiltro, categoriaFiltro, pagamentoFiltro]);
+  }, [transacoes, mesFiltro, pessoaFiltro, tipoFiltro, categoriaFiltro, pagamentoFiltro]);
 
   const resumoFiltrado = useMemo(() => calcularResumo(lancamentosFiltrados), [lancamentosFiltrados]);
 
@@ -363,6 +373,20 @@ function App() {
     setFormaPagamento('');
     setNovaCategoria('');
     setNovaFormaPagamento('');
+  }
+
+  function trocarTipoFiltro(novoTipo) {
+    setTipoFiltro(novoTipo);
+
+    const categoriasDoTipo = opcoesFiltroPorTipo(novoTipo, categorias, transacoes, 'categoria');
+    const pagamentosDoTipo = opcoesFiltroPorTipo(novoTipo, pagamentos, transacoes, 'formaPagamento');
+
+    setCategoriaFiltro((valorAtual) =>
+      valorAtual === 'todos' || categoriasDoTipo.includes(valorAtual) ? valorAtual : 'todos',
+    );
+    setPagamentoFiltro((valorAtual) =>
+      valorAtual === 'todos' || pagamentosDoTipo.includes(valorAtual) ? valorAtual : 'todos',
+    );
   }
 
   function trocarTipoRecorrente(novoTipo) {
@@ -594,11 +618,15 @@ function App() {
 
     const mesArquivo = mesFiltro === 'todos' ? 'todos-os-meses' : mesFiltro;
     const pessoaArquivo = pessoaFiltro === 'todos' ? 'todas-as-pessoas' : pessoaFiltro.replace(/\s+/g, '-').toLowerCase();
+    const tipoArquivo = tipoFiltro === 'todos' ? 'entradas-e-saidas' : tipoFiltro.toLowerCase();
     const categoriaArquivo =
       categoriaFiltro === 'todos' ? 'todas-as-categorias' : categoriaFiltro.replace(/\s+/g, '-').toLowerCase();
     const pagamentoArquivo =
       pagamentoFiltro === 'todos' ? 'todas-as-formas' : pagamentoFiltro.replace(/\s+/g, '-').toLowerCase();
-    XLSX.writeFile(workbook, `controle-de-gastos-${mesArquivo}-${pessoaArquivo}-${categoriaArquivo}-${pagamentoArquivo}.xlsx`);
+    XLSX.writeFile(
+      workbook,
+      `controle-de-gastos-${mesArquivo}-${pessoaArquivo}-${tipoArquivo}-${categoriaArquivo}-${pagamentoArquivo}.xlsx`,
+    );
   }
 
   return (
@@ -1040,6 +1068,15 @@ function App() {
                       {nome}
                     </option>
                   ))}
+                </select>
+              </div>
+
+              <div className="field-group filter-field">
+                <label htmlFor="tipoFiltro">Tipo</label>
+                <select id="tipoFiltro" value={tipoFiltro} onChange={(event) => trocarTipoFiltro(event.target.value)}>
+                  <option value="todos">Entrada e saida</option>
+                  <option value="Entrada">Entrada</option>
+                  <option value="Saida">Saida</option>
                 </select>
               </div>
 
