@@ -219,6 +219,8 @@ function App() {
   const [pagamentos, setPagamentos] = useState(() => carregarOpcoes(PAGAMENTOS_STORAGE_KEY, pagamentosPadrao));
   const [mesFiltro, setMesFiltro] = useState(mesAtual());
   const [pessoaFiltro, setPessoaFiltro] = useState('todos');
+  const [categoriaFiltro, setCategoriaFiltro] = useState('todos');
+  const [pagamentoFiltro, setPagamentoFiltro] = useState('todos');
 
   const ocorrenciasRecorrentes = useMemo(() => gerarOcorrenciasRecorrentes(recorrentes), [recorrentes]);
 
@@ -234,13 +236,31 @@ function App() {
     return [...meses].sort((a, b) => b.localeCompare(a));
   }, [transacoes]);
 
+  const categoriasFiltro = useMemo(() => {
+    const opcoes = new Set([
+      ...Object.values(categorias).flat(),
+      ...transacoes.map((item) => item.categoria),
+    ].filter(Boolean));
+    return [...opcoes].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  }, [categorias, transacoes]);
+
+  const pagamentosFiltro = useMemo(() => {
+    const opcoes = new Set([
+      ...Object.values(pagamentos).flat(),
+      ...transacoes.map((item) => item.formaPagamento),
+    ].filter(Boolean));
+    return [...opcoes].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  }, [pagamentos, transacoes]);
+
   const lancamentosFiltrados = useMemo(() => {
     return transacoes.filter((item) => {
       const passaMes = mesFiltro === 'todos' || item.data?.startsWith(mesFiltro);
       const passaPessoa = pessoaFiltro === 'todos' || item.pessoa === pessoaFiltro;
-      return passaMes && passaPessoa;
+      const passaCategoria = categoriaFiltro === 'todos' || item.categoria === categoriaFiltro;
+      const passaPagamento = pagamentoFiltro === 'todos' || item.formaPagamento === pagamentoFiltro;
+      return passaMes && passaPessoa && passaCategoria && passaPagamento;
     });
-  }, [transacoes, mesFiltro, pessoaFiltro]);
+  }, [transacoes, mesFiltro, pessoaFiltro, categoriaFiltro, pagamentoFiltro]);
 
   const resumoFiltrado = useMemo(() => calcularResumo(lancamentosFiltrados), [lancamentosFiltrados]);
 
@@ -478,6 +498,12 @@ function App() {
     setLista(proximasOpcoes);
     salvarOpcoes(storageKey, proximasOpcoes);
     setValorSelecionado((valorAtual) => (valorAtual === item ? '' : valorAtual));
+    if (storageKey === CATEGORIAS_STORAGE_KEY) {
+      setCategoriaFiltro((valorAtual) => (valorAtual === item ? 'todos' : valorAtual));
+    }
+    if (storageKey === PAGAMENTOS_STORAGE_KEY) {
+      setPagamentoFiltro((valorAtual) => (valorAtual === item ? 'todos' : valorAtual));
+    }
     setAlerta({ tipo: 'sucesso', texto: 'Cadastro removido da lista.' });
   }
 
@@ -568,7 +594,11 @@ function App() {
 
     const mesArquivo = mesFiltro === 'todos' ? 'todos-os-meses' : mesFiltro;
     const pessoaArquivo = pessoaFiltro === 'todos' ? 'todas-as-pessoas' : pessoaFiltro.replace(/\s+/g, '-').toLowerCase();
-    XLSX.writeFile(workbook, `controle-de-gastos-${mesArquivo}-${pessoaArquivo}.xlsx`);
+    const categoriaArquivo =
+      categoriaFiltro === 'todos' ? 'todas-as-categorias' : categoriaFiltro.replace(/\s+/g, '-').toLowerCase();
+    const pagamentoArquivo =
+      pagamentoFiltro === 'todos' ? 'todas-as-formas' : pagamentoFiltro.replace(/\s+/g, '-').toLowerCase();
+    XLSX.writeFile(workbook, `controle-de-gastos-${mesArquivo}-${pessoaArquivo}-${categoriaArquivo}-${pagamentoArquivo}.xlsx`);
   }
 
   return (
@@ -1008,6 +1038,38 @@ function App() {
                   {pessoas.map((nome) => (
                     <option key={nome} value={nome}>
                       {nome}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="field-group filter-field">
+                <label htmlFor="categoriaFiltro">Categoria / Fonte</label>
+                <select
+                  id="categoriaFiltro"
+                  value={categoriaFiltro}
+                  onChange={(event) => setCategoriaFiltro(event.target.value)}
+                >
+                  <option value="todos">Todas as categorias/fontes</option>
+                  {categoriasFiltro.map((item) => (
+                    <option key={item} value={item}>
+                      {labelsCategorias[item] || item}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="field-group filter-field">
+                <label htmlFor="pagamentoFiltro">Forma de pagamento</label>
+                <select
+                  id="pagamentoFiltro"
+                  value={pagamentoFiltro}
+                  onChange={(event) => setPagamentoFiltro(event.target.value)}
+                >
+                  <option value="todos">Todas as formas</option>
+                  {pagamentosFiltro.map((item) => (
+                    <option key={item} value={item}>
+                      {labelsPagamentos[item] || item}
                     </option>
                   ))}
                 </select>
